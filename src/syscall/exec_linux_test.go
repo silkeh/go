@@ -77,15 +77,39 @@ func skipUnprivilegedUserClone(t *testing.T) {
 	}
 }
 
+func isChrooted(t *testing.T) bool {
+	if chroot, err := isChrootedMountInfo(t); err == nil {
+		return chroot
+	}
+
+	return isChrootedIno(t)
+}
+
 // Check if we are in a chroot by checking if the inode of / is
 // different from 2 (there is no better test available to non-root on
 // linux).
-func isChrooted(t *testing.T) bool {
+func isChrootedIno(t *testing.T) bool {
 	root, err := os.Stat("/")
 	if err != nil {
 		t.Fatalf("cannot stat /: %v", err)
 	}
 	return root.Sys().(*syscall.Stat_t).Ino != 2
+}
+
+// Check if we are in a chroot by checking if our mountinfo matches that of PID 1.
+// This only works with sufficient permissions, but is more reliable than checking
+func isChrootedMountInfo(t *testing.T) (bool, error) {
+	initInfo, err := os.ReadFile("/proc/1/mountinfo")
+	if err != nil {
+		return false, err
+	}
+
+	selfInfo, err := os.ReadFile("/proc/self/mountinfo")
+	if err != nil {
+		return false, err
+	}
+
+	return !bytes.Equal(selfInfo, initInfo), nil
 }
 
 func checkUserNS(t *testing.T) {
